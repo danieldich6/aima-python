@@ -71,7 +71,20 @@ def rush_hour_4x4(initial, goals, domain):
                 domain=expr('Car(c) & Cell(frm) & Cell(to) & AdjacentRight(frm, to)')),
             
             # BEGIN_YOUR_CODE
+            Action('MoveLeft(c, frm, to)',
+                precond=expr('At(c, frm) & Clear(to) & Horizontal(c) & AdjacentLeft(frm, to)'),
+                effect=expr('At(c, to) & Clear(frm) & ~At(c, frm) & ~Clear(to)'),
+                domain=expr('Car(c) & Cell(frm) & Cell(to) & AdjacentLeft(frm, to)')),
 
+            Action('MoveUp(c, frm, to)',
+                precond=expr('At(c, frm) & Clear(to) & Vertical(c) & AdjacentUp(frm, to)'),
+                effect=expr('At(c, to) & Clear(frm) & ~At(c, frm) & ~Clear(to)'),
+                domain=expr('Car(c) & Cell(frm) & Cell(to) & AdjacentUp(frm, to)')),
+
+            Action('MoveDown(c, frm, to)',
+                precond=expr('At(c, frm) & Clear(to) & Vertical(c) & AdjacentDown(frm, to)'),
+                effect=expr('At(c, to) & Clear(frm) & ~At(c, frm) & ~Clear(to)'),
+                domain=expr('Car(c) & Cell(frm) & Cell(to) & AdjacentDown(frm, to)')),
                         
             
             # END_YOUR_CODE
@@ -102,7 +115,10 @@ def rush_hour_4x4(initial, goals, domain):
             'AdjacentDown(C1_4, C2_4) & AdjacentDown(C2_4, C3_4) & AdjacentDown(C3_4, C4_4) & '
             
             # BEGIN_YOUR_CODE
-            
+            'AdjacentUp(C2_1, C1_1) & AdjacentUp(C3_1, C2_1) & AdjacentUp(C4_1, C3_1) & '
+            'AdjacentUp(C2_2, C1_2) & AdjacentUp(C3_2, C2_2) & AdjacentUp(C4_2, C3_2) & '
+            'AdjacentUp(C2_3, C1_3) & AdjacentUp(C3_3, C2_3) & AdjacentUp(C4_3, C3_3) & '
+            'AdjacentUp(C2_4, C1_4) & AdjacentUp(C3_4, C2_4) & AdjacentUp(C4_4, C3_4)'
             
             
             # END_YOUR_CODE
@@ -177,7 +193,8 @@ def simple_rush_hour_manual():
 
     # BEGIN_YOUR_CODE
     
-    return []
+    return [    'MoveRight(R, C3_2, C3_3)',
+        'MoveRight(R, C3_3, C3_4)']
 
     # END_YOUR_CODE
 
@@ -186,7 +203,14 @@ def complex_rush_hour_manual():
 
     # BEGIN_YOUR_CODE
     
-    return []
+    return ['MoveUp(E, C3_4, C2_4)',
+        'MoveRight(C, C3_3, C3_4)',
+        'MoveUp(B, C4_3, C3_3)',
+        'MoveUp(D, C3_2, C2_2)',
+        'MoveUp(A, C4_2, C3_2)',
+        'MoveRight(R, C4_1, C4_2)',
+        'MoveRight(R, C4_2, C4_3)',
+        'MoveRight(R, C4_3, C4_4)']
 
     # END_YOUR_CODE 
 
@@ -225,8 +249,10 @@ Hints
 def test_simple_rush_hour_graphplan():
 
     # BEGIN_YOUR_CODE
-
-    pass
+    pp = simple_rush_hour_task()
+    partial = GraphPlan(pp).execute()     # list of layers of utils.Expr
+    total = Linearize(pp).execute()       # list of utils.Expr
+    return partial, total
 
     # END_YOUR_CODE
    
@@ -235,7 +261,10 @@ def test_complex_rush_hour_graphplan():
 
     # BEGIN_YOUR_CODE
 
-    pass
+    pp = complex_rush_hour_task()
+    partial = GraphPlan(pp).execute()
+    total = Linearize(pp).execute()
+    return partial, total
 
     # END_YOUR_CODE
 
@@ -349,8 +378,12 @@ def part_d():
     # BEGIN_YOUR_CODE
     
     # Modify the template below to solve the problem
-    return [('a1', 'i1'), ('a2', 'i1'), ('a3', 'i1'), ('a4', 'i1')] 
-    
+   
+    # a1 needs Vertical(B) and Horizontal(C) -> matches i3
+    # a2 needs Vertical(B) and Vertical(C)  -> matches i2
+    # a3 is the unsolvable/none case          -> use i4 (no a1/a2/a4 fits)
+    # a4 also needs Vertical(B) and Vertical(C)-> matches i2 (order differs)
+    return [('a1', 'i3'), ('a2', 'i2'), ('a3', 'i4'), ('a4', 'i2')]
     # END_YOUR_CODE
 
 
