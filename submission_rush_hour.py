@@ -471,6 +471,153 @@ def rush_hour_with_trucks(config):
     
     # BEGIN_WORK_HERE
     
-    raise NotImplementedError()
+    
+    # ----- helpers -----
+    def C(r, c): return f"C{r}_{c}"
+
+    # ----- grid/domain base -----
+    cells = [C(r, c) for r in range(1, 5) for c in range(1, 5)]
+    cell_defs = " & ".join(f"Cell({x})" for x in cells)
+
+    # Adjacency (Right/Left/Down/Up) — propositional over named cells
+    adj = []
+    for r in range(1, 5):
+        for c in range(1, 4):
+            adj.append(f"AdjacentRight({C(r,c)}, {C(r,c+1)})")
+            adj.append(f"AdjacentLeft({C(r,c+1)}, {C(r,c)})")
+    for c in range(1, 5):
+        for r in range(1, 4):
+            adj.append(f"AdjacentDown({C(r,c)}, {C(r+1,c)})")
+            adj.append(f"AdjacentUp({C(r+1,c)}, {C(r,c)})")
+    adj_defs = " & ".join(adj)
+
+    # ----- initial state: types + positions + clears -----
+    occ_cells = set()
+
+    car_facts = []
+    for name, data in config.get('cars', {}).items():
+        r, c = data['pos']
+        ori = data['dir']
+        car_facts.append(f"Car({name})")
+        car_facts.append(f"At({name}, {C(r,c)})")
+        if ori.lower().startswith('h'):
+            car_facts.append(f"Horizontal({name})")
+        else:
+            car_facts.append(f"Vertical({name})")
+        occ_cells.add(C(r,c))
+
+    truck_facts = []
+    for name, data in config.get('trucks', {}).items():
+        (r1, c1), (r2, c2) = data['pos']
+        ori = data['dir']
+        truck_facts.append(f"Truck({name})")
+        truck_facts.append(f"Occupy({name}, {C(r1,c1)})")
+        truck_facts.append(f"Occupy({name}, {C(r2,c2)})")
+        if ori.lower().startswith('h'):
+            truck_facts.append(f"HorizontalTruck({name})")
+        else:
+            truck_facts.append(f"VerticalTruck({name})")
+        occ_cells.add(C(r1, c1))
+        occ_cells.add(C(r2, c2))
+
+    clear_cells = [x for x in cells if x not in occ_cells]
+    clear_facts = " & ".join(f"Clear({x})" for x in clear_cells)
+
+    initial = " & ".join(
+        [*car_facts, *truck_facts, clear_facts] if clear_facts else [*car_facts, *truck_facts]
+    )
+
+    # ----- goals -----
+    goal_facts = []
+    for name, g in config.get('goal', {}).items():
+        # car goal: (r,c)
+        # truck goal: ((r1,c1),(r2,c2)) – we require both Occupy facts
+        if isinstance(g[0], int):  # (r,c)
+            goal_facts.append(f"At({name}, {C(g[0], g[1])})")
+        else:                      # ((r1,c1),(r2,c2))
+            (r1, c1), (r2, c2) = g
+            goal_facts.append(f"Occupy({name}, {C(r1,c1)})")
+            goal_facts.append(f"Occupy({name}, {C(r2,c2)})")
+    goals = " & ".join(goal_facts) if goal_facts else ""
+
+    # ----- typed domain annotations (static) -----
+    type_defs = []
+    if car_facts:
+        type_defs.append(" & ".join({f.split('(')[0] for f in car_facts}))  # no-op, keep explicit types below
+    domain_types = []
+    if car_facts:
+        domain_types.append(" & ".join({f"Car({k})" for k in config['cars'].keys()}))
+        domain_types.append(" & ".join({
+            (f"Horizontal({k})" if v['dir'].lower().startswith('h') else f"Vertical({k})")
+            for k, v in config['cars'].items()
+        }))
+    if truck_facts:
+        domain_types.append(" & ".join({f"Truck({k})" for k in config['trucks'].keys()}))
+        domain_types.append(" & ".join({
+            (f"HorizontalTruck({k})" if v['dir'].lower().startswith('h') else f"VerticalTruck({k})")
+            for k, v in config['trucks'].items()
+        }))
+
+    typed_domain = " & ".join([x for x in domain_types if x])
+
+    # ----- actions -----
+    actions = [
+        # Cars (length 1), constrained by orientation
+        Action('MoveRightCar(c, frm, to)',
+               precond='At(c, frm) & Clear(to) & Car(c) & Horizontal(c) & AdjacentRight(frm, to)',
+               effect='At(c, to) & Clear(frm) & ~At(c, frm) & ~Clear(to)',
+               domain='Car(c) & Cell(frm) & Cell(to) & AdjacentRight(frm, to)'),
+        Action('MoveLeftCar(c, frm, to)',
+               precond='At(c, frm) & Clear(to) & Car(c) & Horizontal(c) & AdjacentLeft(frm, to)',
+               effect='At(c, to) & Clear(frm) & ~At(c, frm) & ~Clear(to)',
+               domain='Car(c) & Cell(frm) & Cell(to) & AdjacentLeft(frm, to)'),
+        Action('MoveUpCar(c, frm, to)',
+               precond='At(c, frm) & Clear(to) & Car(c) & Vertical(c) & AdjacentUp(frm, to)',
+               effect='At(c, to) & Clear(frm) & ~At(c, frm) & ~Clear(to)',
+               domain='Car(c) & Cell(frm) & Cell(to) & AdjacentUp(frm, to)'),
+        Action('MoveDownCar(c, frm, to)',
+               precond='At(c, frm) & Clear(to) & Car(c) & Vertical(c) & AdjacentDown(frm, to)',
+               effect='At(c, to) & Clear(frm) & ~At(c, frm) & ~Clear(to)',
+               domain='Car(c) & Cell(frm) & Cell(to) & AdjacentDown(frm, to)'),
+
+        # Trucks (length 2), represented by two Occupy(t, cell) facts.
+        # Horizontal right: tail -- head -- to
+        Action('MoveRightTruck(t, tail, head, to)',
+               precond=('Truck(t) & HorizontalTruck(t) & Occupy(t, tail) & Occupy(t, head) & '
+                        'AdjacentRight(tail, head) & AdjacentRight(head, to) & Clear(to)'),
+               effect='Occupy(t, to) & Clear(tail) & ~Occupy(t, tail) & ~Clear(to)',
+               domain='Truck(t) & Cell(tail) & Cell(head) & Cell(to)'),
+        # Horizontal left: to -- head -- tail
+        Action('MoveLeftTruck(t, head, tail, to)',
+               precond=('Truck(t) & HorizontalTruck(t) & Occupy(t, head) & Occupy(t, tail) & '
+                        'AdjacentLeft(head, tail) & AdjacentLeft(tail, to) & Clear(to)'),
+               effect='Occupy(t, to) & Clear(head) & ~Occupy(t, head) & ~Clear(to)',
+               domain='Truck(t) & Cell(head) & Cell(tail) & Cell(to)'),
+        # Vertical up: to above head; free tail (the lower cell)
+        Action('MoveUpTruck(t, head, tail, to)',
+               precond=('Truck(t) & VerticalTruck(t) & Occupy(t, head) & Occupy(t, tail) & '
+                        'AdjacentDown(head, tail) & AdjacentUp(head, to) & Clear(to)'),
+               effect='Occupy(t, to) & Clear(tail) & ~Occupy(t, tail) & ~Clear(to)',
+               domain='Truck(t) & Cell(head) & Cell(tail) & Cell(to)'),
+        # Vertical down: to below tail; free head (the upper cell)
+        Action('MoveDownTruck(t, head, tail, to)',
+               precond=('Truck(t) & VerticalTruck(t) & Occupy(t, head) & Occupy(t, tail) & '
+                        'AdjacentDown(head, tail) & AdjacentDown(tail, to) & Clear(to)'),
+               effect='Occupy(t, to) & Clear(head) & ~Occupy(t, head) & ~Clear(to)',
+               domain='Truck(t) & Cell(head) & Cell(tail) & Cell(to)'),
+    ]
+
+    domain = " & ".join(filter(None, [
+        typed_domain,
+        cell_defs,
+        adj_defs
+    ]))
+
+    return PlanningProblem(
+        initial=expr(initial) if initial else [],
+        goals=expr(goals) if goals else [],
+        actions=actions,
+        domain=expr(domain)
+    )
 
     # #END_WORK_HERE
