@@ -250,13 +250,11 @@ def test_simple_rush_hour_graphplan():
 
     # BEGIN_YOUR_CODE
     pp = simple_rush_hour_task()
-
-    gp = GraphPlan(pp).execute()
-    if isinstance(gp, dict):               # some versions return {'layers': ...}
-        gp = gp['layers']
-    partial = [list(L) for L in gp]        # make list[list[Expr]]
-
-    total = list(Linearize(pp).execute())  # make list[Expr]
+    gp_out = GraphPlan(pp).execute()          # returns [ solution ], or None
+    if gp_out is None:
+        return [], []                         # or raise/assert, depending on your tests
+    partial = gp_out[0]                       # <- unwrap: list[list[Expr]]
+    total   = Linearize(pp).execute()         # list[Expr]
     return partial, total
 
     # END_YOUR_CODE
@@ -267,13 +265,11 @@ def test_complex_rush_hour_graphplan():
     # BEGIN_YOUR_CODE
 
     pp = complex_rush_hour_task()
-
-    gp = GraphPlan(pp).execute()
-    if isinstance(gp, dict):
-        gp = gp['layers']
-    partial = [list(L) for L in gp]
-
-    total = list(Linearize(pp).execute())
+    gp_out = GraphPlan(pp).execute()
+    if gp_out is None:
+        return [], []
+    partial = gp_out[0]                       # <- unwrap
+    total   = Linearize(pp).execute()
     return partial, total
 
     # END_YOUR_CODE
