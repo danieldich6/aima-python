@@ -245,13 +245,26 @@ Hints
    planning problem, execute GraphPlan and Linearize (1 line
    each), and format into the acceptable solution format.
 """
+from logic import Expr, expr
+
+def _L(x):
+    """Normalize partial plan layers to list[list[Expr]]."""
+    y = x['layers'] if isinstance(x, dict) and 'layers' in x else x
+    return [
+        [a if isinstance(a, Expr) else expr(a) for a in (list(layer) if not isinstance(layer, list) else layer)]
+        for layer in list(y)
+    ]
+
+def _T(x):
+    """Normalize total plan to list[Expr]."""
+    return [a if isinstance(a, Expr) else expr(a) for a in list(x)]
 
 def test_simple_rush_hour_graphplan():
 
     # BEGIN_YOUR_CODE
     pp = simple_rush_hour_task()
-    partial = GraphPlan(pp).execute()     # list of layers of utils.Expr
-    total = Linearize(pp).execute()       # list of utils.Expr
+    partial = _L(GraphPlan(pp).execute())
+    total   = _T(Linearize(pp).execute())
     return partial, total
 
     # END_YOUR_CODE
@@ -262,8 +275,8 @@ def test_complex_rush_hour_graphplan():
     # BEGIN_YOUR_CODE
 
     pp = complex_rush_hour_task()
-    partial = GraphPlan(pp).execute()
-    total = Linearize(pp).execute()
+    partial = _L(GraphPlan(pp).execute())
+    total   = _T(Linearize(pp).execute())
     return partial, total
 
     # END_YOUR_CODE
